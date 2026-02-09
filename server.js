@@ -420,6 +420,8 @@ app.get('/api/malik/:id/requests', async (req, res) => {
         bhadotName: bhadot ? bhadot.name : 'Unknown',
         bhadotMobile: bhadot ? bhadot.mobile : '',
         bhadotArea: bhadot ? bhadot.area : '',
+        bhadotCast: bhadot ? bhadot.cast : '',
+        bhadotTotalFamilyMembers: bhadot ? bhadot.totalFamilyMembers : 0,
         status: req.status,
         timestamp: req.timestamp
       };
