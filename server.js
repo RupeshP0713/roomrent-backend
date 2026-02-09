@@ -91,6 +91,7 @@ const BhadotSchema = new mongoose.Schema({
   cast: { type: String, default: '' },
   totalFamilyMembers: { type: Number, default: 0 },
   status: { type: String, enum: ['Waiting', 'Approved'], default: 'Waiting' },
+  isActive: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -98,7 +99,7 @@ const RentRequestSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   malikId: { type: String, required: true },
   bhadotId: { type: String, required: true },
-  status: { type: String, enum: ['Pending', 'Accepted', 'Rejected'], default: 'Pending' },
+  status: { type: String, enum: ['Pending', 'Accepted', 'Rejected', 'Expired'], default: 'Pending' },
   timestamp: { type: Date, default: Date.now }
 });
 
@@ -345,8 +346,8 @@ app.put('/api/malik/:id', async (req, res) => {
 
 app.get('/api/malik/:id/bhadots', async (req, res) => {
   try {
-    // Show all Bhadots to all Maliks regardless of status
-    const bhadots = await Bhadot.find().sort({ createdAt: -1 });
+    // Show only active Bhadots to Maliks
+    const bhadots = await Bhadot.find({ isActive: true }).sort({ createdAt: -1 });
     res.json(bhadots);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -418,7 +419,22 @@ app.post('/api/malik/request', async (req, res) => {
 
 app.get('/api/malik/:id/requests', async (req, res) => {
   try {
-    const requests = await RentRequest.find({ malikId: req.params.id })
+    const malikId = req.params.id;
+
+    // Auto-expire requests older than 5 days for this Malik
+    const now = new Date();
+    const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
+    await RentRequest.updateMany(
+      {
+        malikId,
+        status: { $in: ['Pending', 'Accepted'] },
+        timestamp: { $lt: fiveDaysAgo }
+      },
+      { $set: { status: 'Expired' } }
+    );
+
+    // Load only non-expired requests for Malik dashboard
+    const requests = await RentRequest.find({ malikId, status: { $ne: 'Expired' } })
       .sort({ timestamp: -1 });
     
     const requestsWithDetails = await Promise.all(requests.map(async (req) => {
@@ -517,6 +533,39 @@ app.put('/api/bhadot/:id', async (req, res) => {
   }
 });
 
+// Toggle Bhadot active/inactive status
+app.put('/api/bhadot/:id/active', async (req, res) => {
+  try {
+    const { isActive } = req.body;
+    const bhadotId = req.params.id;
+
+    const bhadot = await Bhadot.findOneAndUpdate(
+      { id: bhadotId },
+      { isActive: !!isActive },
+      { new: true }
+    );
+
+    if (!bhadot) {
+      return res.status(404).json({ error: 'Bhadot not found' });
+    }
+
+    // When Bhadot is set to inactive, auto-reject all active requests
+    if (!bhadot.isActive) {
+      await RentRequest.updateMany(
+        {
+          bhadotId,
+          status: { $in: ['Pending', 'Accepted'] }
+        },
+        { $set: { status: 'Rejected' } }
+      );
+    }
+
+    res.json({ success: true, bhadot });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/bhadot/available-rooms', async (req, res) => {
   try {
     const count = await Bhadot.countDocuments({ status: 'Approved' });
@@ -528,7 +577,21 @@ app.get('/api/bhadot/available-rooms', async (req, res) => {
 
 app.get('/api/bhadot/:id/requests', async (req, res) => {
   try {
-    const requests = await RentRequest.find({ bhadotId: req.params.id })
+    const bhadotId = req.params.id;
+
+    // Auto-expire requests older than 5 days for this Bhadot
+    const now = new Date();
+    const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
+    await RentRequest.updateMany(
+      {
+        bhadotId,
+        status: { $in: ['Pending', 'Accepted'] },
+        timestamp: { $lt: fiveDaysAgo }
+      },
+      { $set: { status: 'Expired' } }
+    );
+
+    const requests = await RentRequest.find({ bhadotId })
       .sort({ timestamp: -1 });
     
     const requestsWithDetails = await Promise.all(requests.map(async (req) => {
