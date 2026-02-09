@@ -346,8 +346,8 @@ app.put('/api/malik/:id', async (req, res) => {
 
 app.get('/api/malik/:id/bhadots', async (req, res) => {
   try {
-    // Show only active Bhadots to Maliks
-    const bhadots = await Bhadot.find({ isActive: true }).sort({ createdAt: -1 });
+    // Show only active Bhadots to Maliks, sorted by newest first (descending order)
+    const bhadots = await Bhadot.find({ isActive: { $ne: false } }).sort({ createdAt: -1, _id: -1 });
     res.json(bhadots);
   } catch (error) {
     res.status(500).json({ error: error.message });
