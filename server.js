@@ -357,10 +357,23 @@ app.post('/api/malik/request', async (req, res) => {
   try {
     const { malikId, bhadotId } = req.body;
     
-    // Check if request already exists
-    const existing = await RentRequest.findOne({ malikId, bhadotId, status: 'Pending' });
-    if (existing) {
-      return res.status(400).json({ error: 'Request already sent' });
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    // Per-tenant cooldown: check last request from this Malik to this specific Bhadot
+    const lastRequestForPair = await RentRequest.findOne({ malikId, bhadotId })
+      .sort({ timestamp: -1 });
+
+    if (lastRequestForPair) {
+      const lastTime = new Date(lastRequestForPair.timestamp);
+      if (lastTime > twentyFourHoursAgo) {
+        const nextAvailableTimeForPair = new Date(lastTime.getTime() + 24 * 60 * 60 * 1000);
+        const hoursRemainingForPair = Math.ceil((nextAvailableTimeForPair - now) / (1000 * 60 * 60));
+        return res.status(400).json({
+          error: `You can send a new request to this tenant after ${hoursRemainingForPair} hour(s).`,
+          hoursRemaining: hoursRemainingForPair
+        });
+      }
     }
     
     // Get all pending requests for this Malik
@@ -368,10 +381,6 @@ app.post('/api/malik/request', async (req, res) => {
       malikId, 
       status: 'Pending' 
     }).sort({ timestamp: 1 }); // Sort by oldest first
-    
-    // Check for requests older than 24 hours
-    const now = new Date();
-    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     
     // Count active pending requests (not older than 24 hours)
     const activePendingRequests = pendingRequests.filter(req => {
