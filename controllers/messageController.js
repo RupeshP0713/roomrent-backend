@@ -133,7 +133,9 @@ exports.getConversations = async (req, res) => {
                         $cond: [{ $eq: ["$senderId", userId] }, "$receiverId", "$senderId"]
                     },
                     otherRole: {
-                        $cond: [{ $eq: ["$senderId", userId] }, "$receiverRole", "$senderRole"]
+                        $toLower: {
+                            $cond: [{ $eq: ["$senderId", userId] }, "$receiverRole", "$senderRole"]
+                        }
                     },
                     content: 1,
                     timestamp: 1,
@@ -161,15 +163,21 @@ exports.getConversations = async (req, res) => {
         // Populate user details
         const enrichedConversations = await Promise.all(conversations.map(async (conv) => {
             let userDetails = null;
-            if (conv._id.role === 'Malik') {
-                userDetails = await Malik.findOne({ id: conv._id.id }).select('name whatsapp');
-            } else if (conv._id.role === 'Bhadot') {
-                userDetails = await Bhadot.findOne({ id: conv._id.id }).select('name mobile');
+            const role = conv._id.role.toLowerCase(); // Ensure lowercase comparison
+
+            try {
+                if (role === 'malik') {
+                    userDetails = await Malik.findOne({ id: conv._id.id }).select('name whatsapp');
+                } else if (role === 'bhadot') {
+                    userDetails = await Bhadot.findOne({ id: conv._id.id }).select('name mobile');
+                }
+            } catch (err) {
+                console.error(`Error fetching user details for ${conv._id.id} (${role}):`, err);
             }
 
             return {
                 _id: conv._id.id,
-                role: conv._id.role,
+                role: role.charAt(0).toUpperCase() + role.slice(1), // Capitalize for display
                 lastMessage: conv.lastMessage,
                 timestamp: conv.timestamp,
                 unreadCount: conv.unreadCount,
