@@ -3,6 +3,7 @@ const router = express.Router();
 const messageController = require('../controllers/messageController');
 const authMiddleware = require('../middleware/authMiddleware');
 
+router.get('/conversations', authMiddleware, messageController.getConversations);
 router.post('/send', authMiddleware, messageController.sendMessage);
 router.get('/conversation/:userId?/:userRole?', authMiddleware, messageController.getMessages);
 router.put('/read', authMiddleware, messageController.markAsRead);
