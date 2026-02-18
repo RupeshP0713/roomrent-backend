@@ -133,7 +133,7 @@ exports.toggleBhadotActive = async (req, res) => {
 
 exports.getAvailableRooms = async (req, res) => {
     try {
-        const count = await Bhadot.countDocuments({ status: 'Approved' });
+        const count = await Malik.countDocuments();
         res.json({ count });
     } catch (error) {
         res.status(500).json({ error: error.message });
