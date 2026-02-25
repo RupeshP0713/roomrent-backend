@@ -186,20 +186,28 @@ exports.getMalikRequests = async (req, res) => {
         const requests = await RentRequest.find({ malikId, status: { $ne: 'Expired' } })
             .sort({ timestamp: -1 });
 
-        const requestsWithDetails = await Promise.all(requests.map(async (req) => {
-            const bhadot = await Bhadot.findOne({ id: req.bhadotId });
+        // Batch fetch all bhadots for these requests
+        const bhadotIds = [...new Set(requests.map(r => r.bhadotId))];
+        const bhadots = await Bhadot.find({ id: { $in: bhadotIds } });
+        const bhadotMap = bhadots.reduce((acc, b) => {
+            acc[b.id] = b;
+            return acc;
+        }, {});
+
+        const requestsWithDetails = requests.map((request) => {
+            const bhadot = bhadotMap[request.bhadotId];
             return {
-                id: req.id,
-                bhadotId: req.bhadotId,
+                id: request.id,
+                bhadotId: request.bhadotId,
                 bhadotName: bhadot ? bhadot.name : 'Unknown',
                 bhadotMobile: bhadot ? bhadot.mobile : '',
                 bhadotArea: bhadot ? bhadot.area : '',
                 bhadotCast: bhadot ? bhadot.cast : '',
                 bhadotTotalFamilyMembers: bhadot ? bhadot.totalFamilyMembers : 0,
-                status: req.status,
-                timestamp: req.timestamp
+                status: request.status,
+                timestamp: request.timestamp
             };
-        }));
+        });
 
         res.json(requestsWithDetails);
     } catch (error) {

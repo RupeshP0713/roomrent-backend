@@ -159,18 +159,26 @@ exports.getBhadotRequests = async (req, res) => {
         const requests = await RentRequest.find({ bhadotId })
             .sort({ timestamp: -1 });
 
-        const requestsWithDetails = await Promise.all(requests.map(async (req) => {
-            const malik = await Malik.findOne({ id: req.malikId });
+        // Batch fetch all maliks for these requests to avoid N+1 queries
+        const malikIds = [...new Set(requests.map(r => r.malikId))];
+        const maliks = await Malik.find({ id: { $in: malikIds } });
+        const malikMap = maliks.reduce((acc, m) => {
+            acc[m.id] = m;
+            return acc;
+        }, {});
+
+        const requestsWithDetails = requests.map((request) => {
+            const malik = malikMap[request.malikId];
             return {
-                id: req.id,
-                malikId: req.malikId,
+                id: request.id,
+                malikId: request.malikId,
                 malikName: malik ? malik.name : 'Unknown',
-                malikWhatsapp: req.status === 'Accepted' && malik ? malik.whatsapp : null,
-                malikAddress: req.status === 'Accepted' && malik ? malik.address : null,
-                status: req.status,
-                timestamp: req.timestamp
+                malikWhatsapp: request.status === 'Accepted' && malik ? malik.whatsapp : null,
+                malikAddress: request.status === 'Accepted' && malik ? malik.address : null,
+                status: request.status,
+                timestamp: request.timestamp
             };
-        }));
+        });
 
         res.json(requestsWithDetails);
     } catch (error) {
